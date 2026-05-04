@@ -19,11 +19,11 @@ def NextState(current_cfg, control_input, time_step, max_speed, l=0.235, r=0.047
     # Separate the current configuration into chassis, arm and wheel components
     chassis_cfg = current_cfg[0:3]
     arm_cfg = current_cfg[3:9]
-    wheel_cfg = current_cfg[9:-1]
+    wheel_cfg = current_cfg[9:]
 
     # Separate the control input intot wheel speed and arm joint speed
     wheel_speed = control_input[0:4]
-    arm_joint_speed = control_input[4:-1]
+    arm_joint_speed = control_input[4:]
 
     # Limit the wheel speed and arm joint speed to the maximum speed
     wheel_speed = np.clip(wheel_speed, -max_speed, max_speed)
@@ -35,11 +35,11 @@ def NextState(current_cfg, control_input, time_step, max_speed, l=0.235, r=0.047
 
     # Compute the change in chassis configuration based on the wheel speeds
     delta_wheel_cfg = wheel_speed * time_step
-    odometry_mat = np.array([[-r/(4(l+w))   , r/(4(l+w))    ,  r/(4(l+w))   , -r/(4(l+w))   ],
+    odometry_mat = np.array([[-r/(4*(l+w))  , r/(4*(l+w))   ,  r/(4*(l+w))  , -r/(4*(l+w))   ],
                              [ r/4          , r/4           ,  r/4          ,  r/4          ],
                              [-r/4          , r/4           , -r/4          ,  r/4          ]])
     body_twist_3 = np.dot(odometry_mat, delta_wheel_cfg)
-    body_twist_6 = np.concatentate((np.zeros(2), body_twist_3, np.zeros(1)))
+    body_twist_6 = np.concatenate((np.zeros(2), body_twist_3, np.zeros(1)))
     se3_mat = mr.VecTose3(body_twist_6)
     tf_mat = mr.MatrixExp6(se3_mat)
     chassis_cfg_mat = np.array([[np.cos(chassis_cfg[0]) , -np.sin(chassis_cfg[0]), 0, chassis_cfg[1]],
@@ -53,9 +53,21 @@ def NextState(current_cfg, control_input, time_step, max_speed, l=0.235, r=0.047
     
     # Combine the next chassis configuration, arm configuration and wheel angles into a single tuple
     next_cfg = np.concatenate((next_chassis_cfg, next_arm_cfg, next_wheel_cfg))
-    next_cfg = list(next_cfg)
+    next_cfg = next_cfg.tolist()  # Convert back to list for output
     return next_cfg
 
+def main():
+    # Example usage of the NextState function
+    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    control_input = [-10.0, 10.0, 10.0, -10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    time_step = 0.01
+    max_speed = 12.3
+    for i in range(101):
+        current_cfg = NextState(current_cfg, control_input, time_step, max_speed)
+        print(f"Time: {i*time_step:.2f}s, Configuration: {current_cfg}")
+
+if __name__ == "__main__":
+    main()
 
 
 
