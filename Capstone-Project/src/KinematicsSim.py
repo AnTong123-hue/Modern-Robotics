@@ -1,5 +1,8 @@
 import modern_robotics as mr
 import numpy as np
+import csv
+import os
+import copy
 
 def NextState(current_cfg, control_input, time_step, max_speed, l=0.235, r=0.0475, w=0.15):
     """
@@ -56,15 +59,57 @@ def NextState(current_cfg, control_input, time_step, max_speed, l=0.235, r=0.047
     next_cfg = next_cfg.tolist()  # Convert back to list for output
     return next_cfg
 
+def save_result(csvdata, filename, opt=1):
+    with open(f"results/{filename}.csv", 'w', newline='') as save_file:
+        writer = csv.writer(save_file)
+        if (opt == 1):
+            writer.writerows(csvdata)
+        else:
+            writer.writerow(csvdata)
+
 def main():
     # Example usage of the NextState function
+    time_step = 0.01
+    max_speed = 12
+    
+    # Drive forward in the x direction
+    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]    
+    control_input = [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    csv_data  = [current_cfg]
+    for i in range(1001):
+        current_cfg = NextState(current_cfg, control_input, time_step, max_speed)
+        temp_cfg = copy.deepcopy(current_cfg)
+        temp_cfg.append(0)
+        csv_data.append(temp_cfg)
+        print(f"Time: {i*time_step:.2f}s, Configuration: {current_cfg}")
+    
+    save_result(csv_data, "forward")
+
+    # Slide sideways in the y direction
+    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    control_input = [-10.0, 10.0, -10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    csv_data  = [current_cfg]
+    for i in range(1001):
+        current_cfg = NextState(current_cfg, control_input, time_step, max_speed)
+        temp_cfg = copy.deepcopy(current_cfg)
+        temp_cfg.append(0)
+        csv_data.append(temp_cfg)
+        print(f"Time: {i*time_step:.2f}s, Configuration: {current_cfg}")
+    save_result(csv_data, "slide sideway")
+
+    # Rotate in CCW direction
     current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     control_input = [-10.0, 10.0, 10.0, -10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    time_step = 0.01
-    max_speed = 12.3
-    for i in range(101):
+    csv_data  = [current_cfg]
+    for i in range(1001):
         current_cfg = NextState(current_cfg, control_input, time_step, max_speed)
+        temp_cfg = copy.deepcopy(current_cfg)
+        temp_cfg.append(0)
+        csv_data.append(temp_cfg)
         print(f"Time: {i*time_step:.2f}s, Configuration: {current_cfg}")
+    save_result(csv_data, "rotate CCW")
+    
+    # Write result to csv file
 
 if __name__ == "__main__":
     main()
