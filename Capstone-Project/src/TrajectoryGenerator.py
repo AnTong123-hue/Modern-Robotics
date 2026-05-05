@@ -51,57 +51,83 @@ def TrajectoryGenerator(T_se_inital, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_
 
     if trajectory_opt == "twist":
         # Trajectory 1: From T_se_initial to T_se_initial_standoff
-        traj1 = mr.ScrewTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
-        traj1 = np.hstack((np.array(traj1), np.zeros((N1, 1))))
+        traj1       = mr.ScrewTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
+        traj1_rot   = np.array(traj1)[:, :3, :3]
+        traj1_trans = np.array(traj1)[:, :3, 3]
+        traj1_stack = np.hstack((traj1_rot.reshape(traj1_rot.shape[0],-1), traj1_trans.reshape(traj1_trans.shape[0], -1), np.zeros((N1, 1))))
         # Trajectory 2: From T_se_initial_standoff to T_se_initial_grasp
-        traj2 = mr.ScrewTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
-        traj2 = np.hstack((np.array(traj2), np.zeros((N2, 1))))
+        traj2       = mr.ScrewTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
+        traj2_rot   = np.array(traj2)[:, :3, :3]
+        traj2_trans = np.array(traj2)[:, :3, 3]
+        traj2_stack = np.hstack((traj2_rot.reshape(traj2_rot.shape[0],-1), traj2_trans.reshape(traj2_trans.shape[0], -1), np.zeros((N2, 1))))
         # Trajectory 3: Gripper closing (hold the end-effector configuration constant)
-        traj3 = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
+        traj3_stack = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
         # Trajectory 4: From T_se_initial_grasp back to T_se_initial_standoff
-        traj4 = mr.ScrewTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
-        traj4 = np.hstack((np.array(traj4), np.ones((N4, 1))))  
+        traj4       = mr.ScrewTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
+        traj4_rot   = np.array(traj4)[:, :3, :3]
+        traj4_trans = np.array(traj4)[:, :3, 3]
+        traj4_stack = np.hstack((traj4_rot.reshape(traj4_rot.shape[0],-1), traj4_trans.reshape(traj4_trans.shape[0], -1), np.ones((N4, 1))))
         # Trajectory 5: From T_se_initial_standoff to T_se_final_standoff
-        traj5 = mr.ScrewTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
-        traj5 = np.hstack((np.array(traj5), np.ones((N5, 1)))) 
+        traj5       = mr.ScrewTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
+        traj5_rot   = np.array(traj5)[:, :3, :3]
+        traj5_trans = np.array(traj5)[:, :3, 3]
+        traj5_stack = np.hstack((traj5_rot.reshape(traj5_rot.shape[0],-1), traj5_trans.reshape(traj5_trans.shape[0], -1), np.ones((N5, 1))))
         # Trajectory 6: From T_se_final_standoff to T_se_final_grasp
-        traj6 = mr.ScrewTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
-        traj6 = np.hstack((np.array(traj6), np.ones((N6, 1)))) 
+        traj6       = mr.ScrewTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
+        traj6_rot   = np.array(traj6)[:, :3, :3]
+        traj6_trans = np.array(traj6)[:, :3, 3]
+        traj6_stack = np.hstack((traj6_rot.reshape(traj6_rot.shape[0],-1), traj6_trans.reshape(traj6_trans.shape[0], -1), np.ones((N6, 1))))
         # Trajectory 7: Gripper opening (hold the end-effector configuration constant)
-        traj7 = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
+        traj7_stack = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
         # Trajectory 8: From T_se_final_grasp back to T_se_final_standoff
-        traj8 = mr.ScrewTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
-        traj8 = np.hstack((np.array(traj8), np.zeros((N8, 1))))  
+        traj8       = mr.ScrewTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
+        traj8_rot   = np.array(traj8)[:, :3, :3]
+        traj8_trans = np.array(traj8)[:, :3, 3]
+        traj8_stack = np.hstack((traj8_rot.reshape(traj8_rot.shape[0],-1), traj8_trans.reshape(traj8_trans.shape[0], -1), np.zeros((N8, 1))))
+
         # Vertically stack all trajectory segments to form the complete trajectory
-        traj = np.vstack((traj1, traj2, traj3, traj4, traj5, traj6, traj7, traj8))
+        traj = np.vstack((traj1_stack, traj2_stack, traj3_stack, traj4_stack, traj5_stack, traj6_stack, traj7_stack, traj8_stack))
         # Convert the trajectory to a list of lists for easier handling
         traj.tolist()
 
     elif trajectory_opt == "cartesian":
         # Trajectory 1: From T_se_initial to T_se_initial_standoff
-        traj1 = mr.CartesianTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
-        traj1 = np.hstack((np.array(traj1), np.zeros((N1, 1))))
+        traj1       = mr.CartesianTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
+        traj1_rot   = np.array(traj1)[:, :3, :3]
+        traj1_trans = np.array(traj1)[:, :3, 3]
+        traj1_stack = np.hstack((traj1_rot.reshape(traj1_rot.shape[0],-1), traj1_trans.reshape(traj1_trans.shape[0], -1), np.zeros((N1, 1))))
         # Trajectory 2: From T_se_initial_standoff to T_se_initial_grasp
-        traj2 = mr.CartesianTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
-        traj2 = np.hstack((np.array(traj2), np.zeros((N2, 1))))
+        traj2       = mr.CartesianTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
+        traj2_rot   = np.array(traj2)[:, :3, :3]
+        traj2_trans = np.array(traj2)[:, :3, 3]
+        traj2_stack = np.hstack((traj2_rot.reshape(traj2_rot.shape[0],-1), traj2_trans.reshape(traj2_trans.shape[0], -1), np.zeros((N2, 1))))
         # Trajectory 3: Gripper closing (hold the end-effector configuration constant)
-        traj3 = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
+        traj3_stack = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
         # Trajectory 4: From T_se_initial_grasp back to T_se_initial_standoff
-        traj4 = mr.CartesianTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
-        traj4 = np.hstack((np.array(traj4), np.ones((N4, 1))))
+        traj4       = mr.CartesianTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
+        traj4_rot   = np.array(traj4)[:, :3, :3]
+        traj4_trans = np.array(traj4)[:, :3, 3]
+        traj4_stack = np.hstack((traj4_rot.reshape(traj4_rot.shape[0],-1), traj4_trans.reshape(traj4_trans.shape[0], -1), np.ones((N4, 1))))
         # Trajectory 5: From T_se_initial_standoff to T_se_final_standoff
-        traj5 = mr.CartesianTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
-        traj5 = np.hstack((np.array(traj5), np.ones((N5, 1))))              
+        traj5       = mr.CartesianTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
+        traj5_rot   = np.array(traj5)[:, :3, :3]
+        traj5_trans = np.array(traj5)[:, :3, 3]
+        traj5_stack = np.hstack((traj5_rot.reshape(traj5_rot.shape[0],-1), traj5_trans.reshape(traj5_trans.shape[0], -1), np.ones((N5, 1))))
         # Trajectory 6: From T_se_final_standoff to T_se_final_grasp
-        traj6 = mr.CartesianTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
-        traj6 = np.hstack((np.array(traj6), np.ones((N6, 1))))
+        traj6       = mr.CartesianTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
+        traj6_rot   = np.array(traj6)[:, :3, :3]
+        traj6_trans = np.array(traj6)[:, :3, 3]
+        traj6_stack = np.hstack((traj6_rot.reshape(traj6_rot.shape[0],-1), traj6_trans.reshape(traj6_trans.shape[0], -1), np.ones((N6, 1))))
         # Trajectory 7: Gripper opening (hold the end-effector configuration constant)
-        traj7 = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
+        traj7_stack = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
         # Trajectory 8: From T_se_final_grasp back to T_se_final_standoff
-        traj8 = mr.CartesianTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
-        traj8 = np.hstack((np.array(traj8), np.zeros((N8, 1))))
-        # Vertically stack all trajectory segments to form the complete trajectory  
-        traj = np.vstack((traj1, traj2, traj3, traj4, traj5, traj6, traj7, traj8))
+        traj8       = mr.CartesianTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
+        traj8_rot   = np.array(traj8)[:, :3, :3]
+        traj8_trans = np.array(traj8)[:, :3, 3]
+        traj8_stack = np.hstack((traj8_rot.reshape(traj8_rot.shape[0],-1), traj8_trans.reshape(traj8_trans.shape[0], -1), np.zeros((N8, 1))))
+
+        # Vertically stack all trajectory segments to form the complete trajectory
+        traj = np.vstack((traj1_stack, traj2_stack, traj3_stack, traj4_stack, traj5_stack, traj6_stack, traj7_stack, traj8_stack))
         # Convert the trajectory to a list of lists for easier handling
         traj.tolist()
     else:
@@ -113,7 +139,37 @@ def TrajectoryGenerator(T_se_inital, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_
     return traj
     
 def main():
-    pass
+    T_sc_initial    = np.array([[1.0, 0.0, 0.0, 1.0  ], 
+                                [0.0, 1.0, 0.0, 0.0  ], 
+                                [0.0, 0.0, 1.0, 0.025], 
+                                [0.0, 0.0, 0.0, 1.0  ]])
+    
+    T_sc_final      = np.array([[ 0.0, 1.0, 0.0,  0.0  ], 
+                                [-1.0, 0.0, 0.0, -1.0  ], 
+                                [ 0.0, 0.0, 1.0,  0.025], 
+                                [ 0.0, 0.0, 0.0,  1.0  ]])
+    
+    T_se_initial    = np.array([[1.0, 0.0, 0.0, 0.0  ], 
+                                [0.0, 1.0, 0.0, 0.0  ], 
+                                [0.0, 0.0, 1.0, 0.5  ], 
+                                [0.0, 0.0, 0.0, 1.0  ]])
+    
+    T_ce_standoff   = np.array([[ 0.0, 0.0, 1.0, 0.0 ], 
+                                [ 0.0, 1.0, 0.0, 0.0 ], 
+                                [-1.0, 0.0, 0.0, 0.1 ], 
+                                [ 0.0, 0.0, 0.0, 1.0 ]])
+    
+    T_ce_grasp      = np.array([[ 0.0, 0.0, 1.0, 0.0   ], 
+                                [ 0.0, 1.0, 0.0, 0.0   ], 
+                                [-1.0, 0.0, 0.0, 0.025 ], 
+                                [ 0.0, 0.0, 0.0, 1.0   ]])
+    k = 1
+    
+    traj = TrajectoryGenerator(T_se_initial, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_standoff, k=k, trajectory_opt="cartesian")
+    for i in range(len(traj)):
+        print(f"Time {i*0.01/k}: {traj[i]}\n")
+
+    
 
 if __name__ == "__main__":
     main()
