@@ -1,10 +1,19 @@
 import numpy as np
 import modern_robotics as mr
+import csv
+
+def save_result(csvdata, filename, opt=1):
+    with open(f"results/{filename}.csv", 'w', newline='') as save_file:
+        writer = csv.writer(save_file)
+        if (opt == 1):
+            writer.writerows(csvdata)
+        else:
+            writer.writerow(csvdata)
 
 def TrajectoryGenerator(T_se_inital, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_standoff, k=1, time_step=0.01, 
                         time_scale_method="cubic", trajectory_opt="twist", 
-                        t_to_init_standoff=10, t_to_init_grasp=2, t_close=0.63, t_back_init_standoff=2, 
-                        t_to_final_standoff=10, t_to_final_grasp=2,t_open=0.63, t_back_final_standoff=2):
+                        t_to_init_standoff=10, t_to_init_grasp=2, t_close=1, t_back_init_standoff=2, 
+                        t_to_final_standoff=10, t_to_final_grasp=2,t_open=1, t_back_final_standoff=2):
     """
     Arguments:
     - T_se_initial: np.array of shape (4, 4) representing the initial end-effector configuration in {s} frame
@@ -31,20 +40,77 @@ def TrajectoryGenerator(T_se_inital, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_
     T_se_final_standoff = T_sc_final @ T_ce_standoff   
     T_se_final_grasp = T_sc_final @ T_ce_grasp
 
-    # Trajectory 1: From T_se_initial to T_se_initial_standoff
-    N = int(t_to_init_standoff / time_step) * k
+    N1 = int(t_to_init_standoff / time_step) * k
+    N2 = int(t_to_init_grasp / time_step) * k
+    N3 = int(t_close / time_step) * k
+    N4 = int(t_back_init_standoff / time_step) * k
+    N5 = int(t_to_final_standoff / time_step) * k
+    N6 = int(t_to_final_grasp / time_step) * k
+    N7 = int(t_open / time_step) * k
+    N8 = int(t_back_final_standoff / time_step) * k
+
     if trajectory_opt == "twist":
-        traj1 = mr.ScrewTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N, time_scale_method)
+        # Trajectory 1: From T_se_initial to T_se_initial_standoff
+        traj1 = mr.ScrewTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
+        traj1 = np.hstack((np.array(traj1), np.zeros((N1, 1))))
+        # Trajectory 2: From T_se_initial_standoff to T_se_initial_grasp
+        traj2 = mr.ScrewTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
+        traj2 = np.hstack((np.array(traj2), np.zeros((N2, 1))))
+        # Trajectory 3: Gripper closing (hold the end-effector configuration constant)
+        traj3 = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
+        # Trajectory 4: From T_se_initial_grasp back to T_se_initial_standoff
+        traj4 = mr.ScrewTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
+        traj4 = np.hstack((np.array(traj4), np.ones((N4, 1))))  
+        # Trajectory 5: From T_se_initial_standoff to T_se_final_standoff
+        traj5 = mr.ScrewTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
+        traj5 = np.hstack((np.array(traj5), np.ones((N5, 1)))) 
+        # Trajectory 6: From T_se_final_standoff to T_se_final_grasp
+        traj6 = mr.ScrewTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
+        traj6 = np.hstack((np.array(traj6), np.ones((N6, 1)))) 
+        # Trajectory 7: Gripper opening (hold the end-effector configuration constant)
+        traj7 = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
+        # Trajectory 8: From T_se_final_grasp back to T_se_final_standoff
+        traj8 = mr.ScrewTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
+        traj8 = np.hstack((np.array(traj8), np.zeros((N8, 1))))  
+        # Vertically stack all trajectory segments to form the complete trajectory
+        traj = np.vstack((traj1, traj2, traj3, traj4, traj5, traj6, traj7, traj8))
+        # Convert the trajectory to a list of lists for easier handling
+        traj.tolist()
+
     elif trajectory_opt == "cartesian":
-        traj1 = mr.CartesianTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N, time_scale_method)
+        # Trajectory 1: From T_se_initial to T_se_initial_standoff
+        traj1 = mr.CartesianTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
+        traj1 = np.hstack((np.array(traj1), np.zeros((N1, 1))))
+        # Trajectory 2: From T_se_initial_standoff to T_se_initial_grasp
+        traj2 = mr.CartesianTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
+        traj2 = np.hstack((np.array(traj2), np.zeros((N2, 1))))
+        # Trajectory 3: Gripper closing (hold the end-effector configuration constant)
+        traj3 = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
+        # Trajectory 4: From T_se_initial_grasp back to T_se_initial_standoff
+        traj4 = mr.CartesianTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
+        traj4 = np.hstack((np.array(traj4), np.ones((N4, 1))))
+        # Trajectory 5: From T_se_initial_standoff to T_se_final_standoff
+        traj5 = mr.CartesianTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
+        traj5 = np.hstack((np.array(traj5), np.ones((N5, 1))))              
+        # Trajectory 6: From T_se_final_standoff to T_se_final_grasp
+        traj6 = mr.CartesianTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
+        traj6 = np.hstack((np.array(traj6), np.ones((N6, 1))))
+        # Trajectory 7: Gripper opening (hold the end-effector configuration constant)
+        traj7 = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
+        # Trajectory 8: From T_se_final_grasp back to T_se_final_standoff
+        traj8 = mr.CartesianTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
+        traj8 = np.hstack((np.array(traj8), np.zeros((N8, 1))))
+        # Vertically stack all trajectory segments to form the complete trajectory  
+        traj = np.vstack((traj1, traj2, traj3, traj4, traj5, traj6, traj7, traj8))
+        # Convert the trajectory to a list of lists for easier handling
+        traj.tolist()
     else:
         raise ValueError("Invalid trajectory_opt. Must be 'twist' or 'cartesian'.")
     
-    # Trajectory 2: From T_se_initial_standoff to T_se_initial_graps
+    # Save the trajectory to a CSV file
+    save_result(traj, "reference_trajectory", opt=1)
     
-
-    
-
+    return traj
     
 def main():
     pass
