@@ -21,8 +21,8 @@ def NextState(current_cfg, control_input, time_step, max_speed, l=0.235, r=0.047
 
     # Separate the current configuration into chassis, arm and wheel components
     chassis_cfg = current_cfg[0:3]
-    arm_cfg = current_cfg[3:9]
-    wheel_cfg = current_cfg[9:]
+    arm_cfg = current_cfg[3:8]
+    wheel_cfg = current_cfg[8:]
 
     # Separate the control input intot wheel speed and arm joint speed
     wheel_speed = control_input[0:4]
