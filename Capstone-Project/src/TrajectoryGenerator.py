@@ -149,9 +149,9 @@ def main():
                                 [ 0.0, 0.0, 1.0,  0.025], 
                                 [ 0.0, 0.0, 0.0,  1.0  ]])
     
-    T_se_initial    = np.array([[1.0, 0.0, 0.0, 0.0  ], 
+    T_se_initial    = np.array([[0.0, 0.0, 1.0, 0.0  ], 
                                 [0.0, 1.0, 0.0, 0.0  ], 
-                                [0.0, 0.0, 1.0, 0.5  ], 
+                                [-1.0, 0.0, 0.0, 0.5 ], 
                                 [0.0, 0.0, 0.0, 1.0  ]])
     
     T_ce_standoff   = np.array([[ 0.0, 0.0, 1.0, 0.0 ], 
@@ -169,7 +169,6 @@ def main():
     for i in range(len(traj)):
         print(f"Time {i*0.01/k}: {traj[i]}\n")
 
-    
 
 if __name__ == "__main__":
     main()

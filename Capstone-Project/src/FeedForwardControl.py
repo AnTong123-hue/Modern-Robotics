@@ -17,7 +17,7 @@ def save_result(csvdata, filename, opt=1):
 
 def extract_traj(filename):
     traj_csv = []
-    with open("results/reference_trajectory.csv") as input_file:
+    with open(f"results/{filename}.csv") as input_file:
         traj_csv_file = csv.reader(input_file)
         for line in traj_csv_file:
             if (line[0][0] != "#"):
@@ -118,8 +118,7 @@ def FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step=0.01, last_integral_er
     X_err_se3  = mr.MatrixLog6(mr.TransInv(X) @ X_d)
     X_err      = mr.se3ToVec(X_err_se3)
 
-    print("Tracking error X_err:")
-    print(X_err)
+    print("Tracking error X_err:", X_err)
 
     # Desired end-effector twist
     V_d_se3    = 1 / time_step * mr.MatrixLog6(mr.TransInv(X_d) @ X_dnext)
@@ -155,7 +154,7 @@ def TestJointLimit(current_joint, joint_speed, max_speed, joint_limit, time_step
     """
     joint_speed = np.clip(joint_speed, -max_speed, max_speed)
     next_joint = current_joint + joint_speed * time_step
-    joint_violates = next_joint > joint_limit
+    joint_violates = np.abs(next_joint) > joint_limit
 
     return joint_violates
 
@@ -184,7 +183,10 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit
     J_base = mr.Adjoint(T_eb) @ odometry_mat_6
 
     J_total = np.hstack((J_base, J_e))
+    print("Jacobian matrix")
+    print(J_total)
     v_dot = np.linalg.pinv(J_total) @ V
+
     joint_violates = TestJointLimit(thetalist, v_dot[4:], max_speed, joint_limit, time_step)
 
     while (np.sum(joint_violates) != 0):
@@ -193,14 +195,7 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit
             J_e_copy[:, i] = J_e_copy[:, i] * (1 - joint_violates[i])
         J_total = np.hstack((J_base, J_e_copy))
         v_dot = np.linalg.pinv(J_total) @ V
-        print("Control input (wheel speeds and joint velocities):")
-        print(v_dot)
         joint_violates = TestJointLimit(thetalist, v_dot[4:], max_speed, joint_limit, time_step)
-
-    # print("Jacobian J_total:")
-    # print(J_total)
-    # print("Control input:")
-    # print(v_dot)
 
     return v_dot
 
@@ -208,21 +203,21 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit
 def main():
 
     # PID control gain
-    Kp = np.array([[0.5, 0, 0, 0, 0, 0],
-                   [0, 2, 0, 0, 0, 0],
-                   [0, 0, 2, 0, 0, 0],
-                   [0, 0, 0, 2, 0, 0],
-                   [0, 0, 0, 0, 2, 0],
-                   [0, 0, 0, 0, 0, 0.5]])
+    Kp = np.array([[0.1, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0.1, 0, 0],
+                   [0, 0, 0, 0, 0.1, 0],
+                   [0, 0, 0, 0, 0, 0.1]])
     
-    Ki = np.array([[10, 0, 0, 0, 0, 0],
+    Ki = np.array([[0, 0, 0, 0, 0, 0],
                    [0, 0, 0, 0, 0, 0],
                    [0, 0, 0, 0, 0, 0],
                    [0, 0, 0, 0, 0, 0],
                    [0, 0, 0, 0, 0, 0],
                    [0, 0, 0, 0, 0, 0]])  
     
-    max_speed = 5
+    max_speed = 100
     
     # Mobile robot
     l=0.235
@@ -233,7 +228,7 @@ def main():
     u = np.array([0.0, 0.0, 0.0, 0.0])
 
     # Robotic arm
-    thetalist = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+    thetalist = np.array([0.0, 0.0, 0.0, -1.6, 0.0])
     Blist = np.array([[0.0, 0.0, 1.0, 0.0, 0.033, 0.0],
                       [0.0, -1.0, 0.0, -0.5076, 0.0, 0.0],
                       [0.0, -1.0, 0.0, -0.3526, 0.0, 0.0],
@@ -258,27 +253,38 @@ def main():
 
     traj = extract_traj("reference_trajectory")
     integral_error = 0
-    cfg_hist = [current_cfg]
+    cfg_hist = []
+    current_cfg_save    = copy.deepcopy(current_cfg.tolist())
+    current_cfg_save.append(0)
+    print(len(current_cfg_save))
+    cfg_hist.append(current_cfg_save)
     err_hist = []
 
     for i in range(len(traj) - 1):
         R_d = np.reshape(np.array(traj[i][0:9]), (3, 3))
         p_d = np.reshape(np.array(traj[i][9:12]), (3, 1))
         X_d = np.vstack((np.hstack((R_d, p_d)), np.array([0.0, 0.0, 0.0, 1.0])))
-
+        
         R_dnext = np.reshape(np.array(traj[i+1][0:9]), (3, 3))
         p_dnext = np.reshape(np.array(traj[i+1][9:12]), (3, 1))
-        X_dnext = np.vstack((np.hstack((R_dnext, p_dnext)), np.array([0.0, 0.0, 0.0, 1.0])))  
+        X_dnext = np.vstack((np.hstack((R_dnext, p_dnext)), np.array([0.0, 0.0, 0.0, 1.0])))
+        
+        if i == 0:
+            print("Initial desired configuration:")
+            print(X_d)
 
         X_err = mr.se3ToVec(mr.MatrixLog6(mr.TransInv(X) @ X_d))
         err_hist.append(X_err)
 
         V, integral_error   = FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step, integral_error)
-        print(integral_error)
-        v_dot               = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed, np.array([2*np.pi, 2*np.pi, 2*np.pi, 2*np.pi, 2*np.pi]), time_step=0.01, l=l, r=r, w=w)
+
+        v_dot               = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed, np.array([1.0, 1.0, 0.2, 1.0, 1.0]), time_step=0.01, l=l, r=r, w=w)
+        print("Control commands:", v_dot)
         control_input       = v_dot.tolist()
         current_cfg         = NextState(current_cfg, control_input, time_step, max_speed, l, r, w)
+        
         X                   = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
+        
         current_cfg_save    = copy.deepcopy(current_cfg)
         current_cfg_save.append(traj[i][-1])
         cfg_hist.append(current_cfg_save)
@@ -297,8 +303,59 @@ def main():
     plt.title('Tracking Error over Time')
     plt.legend()
     plt.show()
-    save_result(cfg_hist, "feedforward_control")
+    save_result(cfg_hist, "control")
 
+def test():
+
+    print("Test feedforward control law")
+    thetalist = np.array([0.0, 0.0, 0.2, -1.6, 0.0])
+
+    Blist = np.array([[0.0, 0.0, 1.0, 0.0, 0.033, 0.0],
+                      [0.0, -1.0, 0.0, -0.5076, 0.0, 0.0],
+                      [0.0, -1.0, 0.0, -0.3526, 0.0, 0.0],
+                      [0.0, -1.0, 0.0, -0.2176, 0.0, 0.0],
+                      [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]]).T
+    
+    T_b0 = np.array([[1.0, 0.0, 0.0, 0.1662],
+                     [0.0, 1.0, 0.0, 0.0],
+                     [0.0, 0.0, 1.0, 0.0026],
+                     [0.0, 0.0, 0.0, 1.0]])
+    
+    M_0e = np.array([[1.0, 0.0, 0.0, 0.033],
+                     [0.0, 1.0, 0.0, 0.0],
+                     [0.0, 0.0, 1.0, 0.6546],
+                     [0.0, 0.0, 0.0, 1.0]])
+    
+    X_d = np.array([[0.0, 0.0, 1.0, 0.5],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [-1.0, 0.0, 0.0, 0.5],
+                    [0.0, 0.0, 0.0, 1.0]])
+    
+    X_dnext = np.array([[0.0, 0.0, 1.0, 0.6],
+                        [0.0, 1.0, 0.0, 0.0], 
+                        [-1.0, 0.0, 0.0, 0.3],
+                        [0.0, 0.0, 0.0, 1.0]])
+
+    X = np.array([[0.170, 0.0, 0.985, 0.387],
+                    [0.0, 1.0, 0.0, 0.0], 
+                    [-0.985, 0.0, 0.170, 0.570],
+                    [0.0 ,0.0, 0.0, 1.0]])
+    
+    V, _ = FeedforwardControl(X, X_d, X_dnext, np.eye(6), np.zeros((6,6)))
+    control_cmd = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist)
+    print("Control twist: ", V)
+    print("Control command: ", control_cmd)
+    
+    print("Test forward kinematics")
+    q = np.array([0.0, 0.0, 0.0])
+    u = np.array([0.0, 0.0, 0.0, 0.0])
+    thetalist = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+    
+    current_cfg = [0, 0, 0, 0, 0, 0.2,-1.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    T_se = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
+    print("End-effector initial configuration")
+    print(T_se)
 
 if __name__ == "__main__":
+    # main()
     main()

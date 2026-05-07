@@ -73,8 +73,8 @@ def main():
     max_speed = 12
     
     # Drive forward in the x direction
-    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]    
-    control_input = [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]    
+    control_input = [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     csv_data  = [current_cfg]
     for i in range(1001):
         current_cfg = NextState(current_cfg, control_input, time_step, max_speed)
@@ -86,8 +86,8 @@ def main():
     save_result(csv_data, "forward")
 
     # Slide sideways in the y direction
-    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    control_input = [-10.0, 10.0, -10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    control_input = [-10.0, 10.0, -10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     csv_data  = [current_cfg]
     for i in range(1001):
         current_cfg = NextState(current_cfg, control_input, time_step, max_speed)
@@ -98,10 +98,10 @@ def main():
     save_result(csv_data, "slide sideway")
 
     # Rotate in CCW direction
-    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    control_input = [-10.0, 10.0, 10.0, -10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    current_cfg = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    control_input = [-10.0, 10.0, 10.0, -10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     csv_data  = [current_cfg]
-    for i in range(1001):
+    for i in range(101):
         current_cfg = NextState(current_cfg, control_input, time_step, max_speed)
         temp_cfg = copy.deepcopy(current_cfg)
         temp_cfg.append(0)
