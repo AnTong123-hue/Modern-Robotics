@@ -2,6 +2,7 @@ import modern_robotics as mr
 import numpy as np
 import csv
 import copy
+import matplotlib.pyplot as plt
 
 # Set precision to 3 decimal places
 np.set_printoptions(precision=3)
@@ -123,13 +124,13 @@ def FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step=0.01, last_integral_er
     # Desired end-effector twist
     V_d_se3    = 1 / time_step * mr.MatrixLog6(mr.TransInv(X_d) @ X_dnext)
     V_d        = mr.se3ToVec(V_d_se3)
-    print("Desired end-effector twist V_d:")
-    print(V_d)
+    # print("Desired end-effector twist V_d:")
+    # print(V_d)
 
     # End-effector twist in body frame
     V_d_body   = mr.Adjoint(mr.TransInv(X) @ X_d) @ V_d
-    print("Desired end-effector twist in body frame V_d_body:")
-    print(V_d_body)
+    # print("Desired end-effector twist in body frame V_d_body:")
+    # print(V_d_body)
 
     # Integral of the error
     X_err_integral = last_integral_error + X_err * time_step
@@ -196,10 +197,10 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit
         print(v_dot)
         joint_violates = TestJointLimit(thetalist, v_dot[4:], max_speed, joint_limit, time_step)
 
-    print("Jacobian J_total:")
-    print(J_total)
-    print("Control input:")
-    print(v_dot)
+    # print("Jacobian J_total:")
+    # print(J_total)
+    # print("Control input:")
+    # print(v_dot)
 
     return v_dot
 
@@ -207,9 +208,21 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit
 def main():
 
     # PID control gain
-    Kp = np.ones((6, 6)) / 10.0
-    Ki = np.zeros((6, 6))  
-    max_speed = 10
+    Kp = np.array([[0.5, 0, 0, 0, 0, 0],
+                   [0, 2, 0, 0, 0, 0],
+                   [0, 0, 2, 0, 0, 0],
+                   [0, 0, 0, 2, 0, 0],
+                   [0, 0, 0, 0, 2, 0],
+                   [0, 0, 0, 0, 0, 0.5]])
+    
+    Ki = np.array([[10, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0, 0, 0],
+                   [0, 0, 0, 0, 0, 0]])  
+    
+    max_speed = 5
     
     # Mobile robot
     l=0.235
@@ -246,6 +259,7 @@ def main():
     traj = extract_traj("reference_trajectory")
     integral_error = 0
     cfg_hist = [current_cfg]
+    err_hist = []
 
     for i in range(len(traj) - 1):
         R_d = np.reshape(np.array(traj[i][0:9]), (3, 3))
@@ -256,7 +270,11 @@ def main():
         p_dnext = np.reshape(np.array(traj[i+1][9:12]), (3, 1))
         X_dnext = np.vstack((np.hstack((R_dnext, p_dnext)), np.array([0.0, 0.0, 0.0, 1.0])))  
 
+        X_err = mr.se3ToVec(mr.MatrixLog6(mr.TransInv(X) @ X_d))
+        err_hist.append(X_err)
+
         V, integral_error   = FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step, integral_error)
+        print(integral_error)
         v_dot               = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed, np.array([2*np.pi, 2*np.pi, 2*np.pi, 2*np.pi, 2*np.pi]), time_step=0.01, l=l, r=r, w=w)
         control_input       = v_dot.tolist()
         current_cfg         = NextState(current_cfg, control_input, time_step, max_speed, l, r, w)
@@ -265,7 +283,22 @@ def main():
         current_cfg_save.append(traj[i][-1])
         cfg_hist.append(current_cfg_save)
     
+    # plot tracking error
+    plt.figure()
+    err_hist = np.array(err_hist)
+    plt.plot(err_hist[:, 0], label='omega_x_err')
+    plt.plot(err_hist[:, 1], label='omega_y_err')
+    plt.plot(err_hist[:, 2], label='omega_z_err')
+    plt.plot(err_hist[:, 3], label='v_x_err')
+    plt.plot(err_hist[:, 4], label='v_y_err')
+    plt.plot(err_hist[:, 5], label='v_z_err')
+    plt.xlabel('Time step')
+    plt.ylabel('Tracking Error')
+    plt.title('Tracking Error over Time')
+    plt.legend()
+    plt.show()
     save_result(cfg_hist, "feedforward_control")
+
 
 if __name__ == "__main__":
     main()
