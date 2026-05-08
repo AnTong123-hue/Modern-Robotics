@@ -82,6 +82,134 @@ def NextState(current_cfg, control_input, time_step, max_speed, l=0.235, r=0.047
     next_cfg = next_cfg.tolist()  # Convert back to list for output
     return next_cfg
 
+def TrajectoryGenerator(T_se_inital, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_standoff, k=1, time_step=0.01, 
+                        time_scale_method="cubic", trajectory_opt="twist", 
+                        t_to_init_standoff=10, t_to_init_grasp=2, t_close=1, t_back_init_standoff=2, 
+                        t_to_final_standoff=10, t_to_final_grasp=2,t_open=1, t_back_final_standoff=2):
+    """
+    Arguments:
+    - T_se_initial: np.array of shape (4, 4) representing the initial end-effector configuration in {s} frame
+    - T_sc_initial: np.array of shape (4, 4) representing the initial object configuration in {s} frame
+    - T_sc_final: np.array of shape (4, 4) representing the final object configuration in {s} frame
+    - T_ce_grasp: np.array of shape (4, 4) representing the end-effector configuration relative to the object when grasping
+    - T_ce_standoff: np.array of shape (4, 4) representing the end-effector configuration relative to the object when in standoff position
+    - k: The number of trajectory points per 0.01 seconds
+    - time_step: The time step for the trajectory generation
+    - trajectory_opt: "twist" for twist-based trajectory generation, "cartesian" for rotaion and translation decoupled trajectory generation
+    - time_scale_method: "cubic" for cubic time scaling, "quintic" for quintic time scaling
+    - t_*: The time durations for each segment of the trajectory in seconds
+
+    Returns:
+    - traj: A matrix of N flatten configuration references of shape (N, 13) representing the end-effector configurations at each time step along the trajectory
+    Example return value: [r_11, r_12, r_13, r_21, r_22, r_23, r_31, r_32, r_33, p_x, p_y, p_z, gripper_state]
+
+    Additional Notes:
+    - A csv file with eight-segment reference trajectory should be generated 
+    - Opening and closing the gripper takes up to 0.625 seconds
+    """
+    T_se_initial_standoff = T_sc_initial @ T_ce_standoff
+    T_se_initial_grasp = T_sc_initial @ T_ce_grasp
+    T_se_final_standoff = T_sc_final @ T_ce_standoff   
+    T_se_final_grasp = T_sc_final @ T_ce_grasp
+
+    N1 = int(t_to_init_standoff / time_step) * k
+    N2 = int(t_to_init_grasp / time_step) * k
+    N3 = int(t_close / time_step) * k
+    N4 = int(t_back_init_standoff / time_step) * k
+    N5 = int(t_to_final_standoff / time_step) * k
+    N6 = int(t_to_final_grasp / time_step) * k
+    N7 = int(t_open / time_step) * k
+    N8 = int(t_back_final_standoff / time_step) * k
+
+    if trajectory_opt == "twist":
+        # Trajectory 1: From T_se_initial to T_se_initial_standoff
+        traj1       = mr.ScrewTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
+        traj1_rot   = np.array(traj1)[:, :3, :3]
+        traj1_trans = np.array(traj1)[:, :3, 3]
+        traj1_stack = np.hstack((traj1_rot.reshape(traj1_rot.shape[0],-1), traj1_trans.reshape(traj1_trans.shape[0], -1), np.zeros((N1, 1))))
+        # Trajectory 2: From T_se_initial_standoff to T_se_initial_grasp
+        traj2       = mr.ScrewTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
+        traj2_rot   = np.array(traj2)[:, :3, :3]
+        traj2_trans = np.array(traj2)[:, :3, 3]
+        traj2_stack = np.hstack((traj2_rot.reshape(traj2_rot.shape[0],-1), traj2_trans.reshape(traj2_trans.shape[0], -1), np.zeros((N2, 1))))
+        # Trajectory 3: Gripper closing (hold the end-effector configuration constant)
+        traj3_stack = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
+        # Trajectory 4: From T_se_initial_grasp back to T_se_initial_standoff
+        traj4       = mr.ScrewTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
+        traj4_rot   = np.array(traj4)[:, :3, :3]
+        traj4_trans = np.array(traj4)[:, :3, 3]
+        traj4_stack = np.hstack((traj4_rot.reshape(traj4_rot.shape[0],-1), traj4_trans.reshape(traj4_trans.shape[0], -1), np.ones((N4, 1))))
+        # Trajectory 5: From T_se_initial_standoff to T_se_final_standoff
+        traj5       = mr.ScrewTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
+        traj5_rot   = np.array(traj5)[:, :3, :3]
+        traj5_trans = np.array(traj5)[:, :3, 3]
+        traj5_stack = np.hstack((traj5_rot.reshape(traj5_rot.shape[0],-1), traj5_trans.reshape(traj5_trans.shape[0], -1), np.ones((N5, 1))))
+        # Trajectory 6: From T_se_final_standoff to T_se_final_grasp
+        traj6       = mr.ScrewTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
+        traj6_rot   = np.array(traj6)[:, :3, :3]
+        traj6_trans = np.array(traj6)[:, :3, 3]
+        traj6_stack = np.hstack((traj6_rot.reshape(traj6_rot.shape[0],-1), traj6_trans.reshape(traj6_trans.shape[0], -1), np.ones((N6, 1))))
+        # Trajectory 7: Gripper opening (hold the end-effector configuration constant)
+        traj7_stack = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
+        # Trajectory 8: From T_se_final_grasp back to T_se_final_standoff
+        traj8       = mr.ScrewTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
+        traj8_rot   = np.array(traj8)[:, :3, :3]
+        traj8_trans = np.array(traj8)[:, :3, 3]
+        traj8_stack = np.hstack((traj8_rot.reshape(traj8_rot.shape[0],-1), traj8_trans.reshape(traj8_trans.shape[0], -1), np.zeros((N8, 1))))
+
+        # Vertically stack all trajectory segments to form the complete trajectory
+        traj = np.vstack((traj1_stack, traj2_stack, traj3_stack, traj4_stack, traj5_stack, traj6_stack, traj7_stack, traj8_stack))
+        # Convert the trajectory to a list of lists for easier handling
+        # traj = traj.tolist()
+
+    elif trajectory_opt == "cartesian":
+        # Trajectory 1: From T_se_initial to T_se_initial_standoff
+        traj1       = mr.CartesianTrajectory(T_se_inital, T_se_initial_standoff, t_to_init_standoff, N1, time_scale_method)
+        traj1_rot   = np.array(traj1)[:, :3, :3]
+        traj1_trans = np.array(traj1)[:, :3, 3]
+        traj1_stack = np.hstack((traj1_rot.reshape(traj1_rot.shape[0],-1), traj1_trans.reshape(traj1_trans.shape[0], -1), np.zeros((N1, 1))))
+        # Trajectory 2: From T_se_initial_standoff to T_se_initial_grasp
+        traj2       = mr.CartesianTrajectory(T_se_initial_standoff, T_se_initial_grasp, t_to_init_grasp, N2, time_scale_method)
+        traj2_rot   = np.array(traj2)[:, :3, :3]
+        traj2_trans = np.array(traj2)[:, :3, 3]
+        traj2_stack = np.hstack((traj2_rot.reshape(traj2_rot.shape[0],-1), traj2_trans.reshape(traj2_trans.shape[0], -1), np.zeros((N2, 1))))
+        # Trajectory 3: Gripper closing (hold the end-effector configuration constant)
+        traj3_stack = np.tile(np.hstack((T_se_initial_grasp[:3, :3].flatten(), T_se_initial_grasp[:3, 3], np.array([1]))), (N3, 1))
+        # Trajectory 4: From T_se_initial_grasp back to T_se_initial_standoff
+        traj4       = mr.CartesianTrajectory(T_se_initial_grasp, T_se_initial_standoff, t_back_init_standoff, N4, time_scale_method)
+        traj4_rot   = np.array(traj4)[:, :3, :3]
+        traj4_trans = np.array(traj4)[:, :3, 3]
+        traj4_stack = np.hstack((traj4_rot.reshape(traj4_rot.shape[0],-1), traj4_trans.reshape(traj4_trans.shape[0], -1), np.ones((N4, 1))))
+        # Trajectory 5: From T_se_initial_standoff to T_se_final_standoff
+        traj5       = mr.CartesianTrajectory(T_se_initial_standoff, T_se_final_standoff, t_to_final_standoff, N5, time_scale_method)
+        traj5_rot   = np.array(traj5)[:, :3, :3]
+        traj5_trans = np.array(traj5)[:, :3, 3]
+        traj5_stack = np.hstack((traj5_rot.reshape(traj5_rot.shape[0],-1), traj5_trans.reshape(traj5_trans.shape[0], -1), np.ones((N5, 1))))
+        # Trajectory 6: From T_se_final_standoff to T_se_final_grasp
+        traj6       = mr.CartesianTrajectory(T_se_final_standoff, T_se_final_grasp, t_to_final_grasp, N6, time_scale_method)
+        traj6_rot   = np.array(traj6)[:, :3, :3]
+        traj6_trans = np.array(traj6)[:, :3, 3]
+        traj6_stack = np.hstack((traj6_rot.reshape(traj6_rot.shape[0],-1), traj6_trans.reshape(traj6_trans.shape[0], -1), np.ones((N6, 1))))
+        # Trajectory 7: Gripper opening (hold the end-effector configuration constant)
+        traj7_stack = np.tile(np.hstack((T_se_final_grasp[:3, :3].flatten(), T_se_final_grasp[:3, 3], np.array([0]))), (N7, 1))
+        # Trajectory 8: From T_se_final_grasp back to T_se_final_standoff
+        traj8       = mr.CartesianTrajectory(T_se_final_grasp, T_se_final_standoff, t_back_final_standoff, N8, time_scale_method)
+        traj8_rot   = np.array(traj8)[:, :3, :3]
+        traj8_trans = np.array(traj8)[:, :3, 3]
+        traj8_stack = np.hstack((traj8_rot.reshape(traj8_rot.shape[0],-1), traj8_trans.reshape(traj8_trans.shape[0], -1), np.zeros((N8, 1))))
+
+        # Vertically stack all trajectory segments to form the complete trajectory
+        traj = np.vstack((traj1_stack, traj2_stack, traj3_stack, traj4_stack, traj5_stack, traj6_stack, traj7_stack, traj8_stack))
+        # Convert the trajectory to a list of lists for easier handling
+        # traj = traj.tolist()
+    else:
+        raise ValueError("Invalid trajectory_opt. Must be 'twist' or 'cartesian'.")
+    
+    # Save the trajectory to a CSV file
+    save_result(traj, "reference_trajectory", opt=1)
+    
+    return traj
+
 def MMForwardKinematics(current_cfg, T_b0, M_0e, Blist):
     phi, x, y = current_cfg[0:3]
     thetalist = current_cfg[3:8]
@@ -112,6 +240,8 @@ def FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step=0.01, last_integral_er
 
     Returns:
     - V         : A numpy array of shape (6,) representing the commanded end-effector twist. 
+    - X_err     : A numpy array of shape (6,) representing the current tracking error in se3 vector form.
+    - integral_error : A numpy array of shape (6,) representing the integral of the tracking error up to the current time step.
     """ 
 
     # Tracking error
@@ -137,7 +267,7 @@ def FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step=0.01, last_integral_er
     # Feedforward control law
     V = V_d_body + Kp @ X_err + Ki @ X_err_integral
 
-    return V, X_err_integral
+    return V, X_err, X_err_integral
 
 def TestJointLimit(current_joint, joint_speed, max_speed, joint_limit, time_step=0.01):
     """
@@ -157,6 +287,17 @@ def TestJointLimit(current_joint, joint_speed, max_speed, joint_limit, time_step
     joint_violates = np.abs(next_joint) > joint_limit
 
     return joint_violates
+
+def JointLimitTest(current_joint, joint_limit):
+    next_joint = copy.deepcopy(current_joint)
+    for i in range(len(current_joint)):
+        if current_joint[i] > joint_limit[i]:
+            next_joint[i] = joint_limit[i]
+        elif current_joint[i] < -joint_limit[i]:
+            next_joint[i] = -joint_limit[i]
+        else:
+            next_joint[i] = current_joint[i]
+    return next_joint
 
 def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit=np.zeros(5), time_step = 0.01, l=0.235, r=0.0475, w=0.15):
     """
@@ -185,8 +326,8 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit
     J_total = np.hstack((J_base, J_e))
     print("Jacobian matrix")
     print(J_total)
-    v_dot = np.linalg.pinv(J_total) @ V
-
+    v_dot = np.linalg.pinv(J_total, rtol=0.001) @ V
+    return v_dot
     joint_violates = TestJointLimit(thetalist, v_dot[4:], max_speed, joint_limit, time_step)
 
     while (np.sum(joint_violates) != 0):
@@ -201,14 +342,44 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed=10, joint_limit
 
 
 def main():
+    # Trajectory generation
+    T_sc_initial    = np.array([[1.0, 0.0, 0.0, 1.0  ], 
+                                [0.0, 1.0, 0.0, 0.0  ], 
+                                [0.0, 0.0, 1.0, 0.025], 
+                                [0.0, 0.0, 0.0, 1.0  ]])
+    
+    T_sc_final      = np.array([[ 0.0, 1.0, 0.0,  0.0  ], 
+                                [-1.0, 0.0, 0.0, -1.0  ], 
+                                [ 0.0, 0.0, 1.0,  0.025], 
+                                [ 0.0, 0.0, 0.0,  1.0  ]])
+    
+    T_se_initial    = np.array([[0.0, 0.0, 1.0, 0.0  ], 
+                                [0.0, 1.0, 0.0, 0.0  ], 
+                                [-1.0, 0.0, 0.0, 0.5 ], 
+                                [0.0, 0.0, 0.0, 1.0  ]])
+    
+    T_ce_standoff   = np.array([[ 0.0, 0.0, 1.0, 0.0 ], 
+                                [ 0.0, 1.0, 0.0, 0.0 ], 
+                                [-1.0, 0.0, 0.0, 0.1 ], 
+                                [ 0.0, 0.0, 0.0, 1.0 ]])
+    
+    T_ce_grasp      = np.array([[ 0.0, 0.0, 1.0, 0.0   ], 
+                                [ 0.0, 1.0, 0.0, 0.0   ], 
+                                [-1.0, 0.0, 0.0, 0.025 ], 
+                                [ 0.0, 0.0, 0.0, 1.0   ]])
+    k = 1
+    # Calculate the reference trajectory for the end-effector to follow
+    traj = TrajectoryGenerator(T_se_initial, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_standoff, k=k, trajectory_opt="cartesian")
 
+    # ============================== The system's parameters and initial configuration ==============================
     # PID control gain
-    Kp = np.array([[0.1, 0, 0, 0, 0, 0],
-                   [0, 0, 0, 0, 0, 0],
-                   [0, 0, 0, 0, 0, 0],
-                   [0, 0, 0, 0.1, 0, 0],
-                   [0, 0, 0, 0, 0.1, 0],
-                   [0, 0, 0, 0, 0, 0.1]])
+    # Kp = np.zeros((6,6))
+    Kp = np.array([[1, 0, 0, 0, 0, 0],
+                   [0, 1, 0, 0, 0, 0],
+                   [0, 0, 1, 0, 0, 0],
+                   [0, 0, 0, 1, 0, 0],
+                   [0, 0, 0, 0, 1, 0],
+                   [0, 0, 0, 0, 0, 1]])
     
     Ki = np.array([[0, 0, 0, 0, 0, 0],
                    [0, 0, 0, 0, 0, 0],
@@ -217,9 +388,9 @@ def main():
                    [0, 0, 0, 0, 0, 0],
                    [0, 0, 0, 0, 0, 0]])  
     
-    max_speed = 100
+    max_speed = 10
     
-    # Mobile robot
+    # Mobile robot parameters
     l=0.235
     r=0.0475
     w=0.15
@@ -227,8 +398,8 @@ def main():
     q = np.array([0.0, 0.0, 0.0])
     u = np.array([0.0, 0.0, 0.0, 0.0])
 
-    # Robotic arm
-    thetalist = np.array([0.0, 0.0, 0.0, -1.6, 0.0])
+    # Robotic arm parameters
+    thetalist = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
     Blist = np.array([[0.0, 0.0, 1.0, 0.0, 0.033, 0.0],
                       [0.0, -1.0, 0.0, -0.5076, 0.0, 0.0],
                       [0.0, -1.0, 0.0, -0.3526, 0.0, 0.0],
@@ -250,8 +421,6 @@ def main():
     # Initial configuration of end-effector
     X       = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
     time_step = 0.01
-
-    traj = extract_traj("reference_trajectory")
     integral_error = 0
     cfg_hist = []
     current_cfg_save    = copy.deepcopy(current_cfg.tolist())
@@ -261,33 +430,32 @@ def main():
     err_hist = []
 
     for i in range(len(traj) - 1):
-        R_d = np.reshape(np.array(traj[i][0:9]), (3, 3))
-        p_d = np.reshape(np.array(traj[i][9:12]), (3, 1))
-        X_d = np.vstack((np.hstack((R_d, p_d)), np.array([0.0, 0.0, 0.0, 1.0])))
+        # Current end-effector configuration
+        X           = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
+        # Desired end-effector configuration
+        R_d         = np.reshape(np.array(traj[i][0:9]), (3, 3))
+        p_d         = np.reshape(np.array(traj[i][9:12]), (3, 1))
+        X_d         = np.vstack((np.hstack((R_d, p_d)), np.array([0.0, 0.0, 0.0, 1.0])))
+        # Next desired end-effector configuration
+        R_dnext     = np.reshape(np.array(traj[i+1][0:9]), (3, 3))
+        p_dnext     = np.reshape(np.array(traj[i+1][9:12]), (3, 1))
+        X_dnext     = np.vstack((np.hstack((R_dnext, p_dnext)), np.array([0.0, 0.0, 0.0, 1.0])))
+
+        # Twist feedforward control law to calculate the control command
+        V, X_err, integral_error   = FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step, integral_error)
         
-        R_dnext = np.reshape(np.array(traj[i+1][0:9]), (3, 3))
-        p_dnext = np.reshape(np.array(traj[i+1][9:12]), (3, 1))
-        X_dnext = np.vstack((np.hstack((R_dnext, p_dnext)), np.array([0.0, 0.0, 0.0, 1.0])))
-        
-        if i == 0:
-            print("Initial desired configuration:")
-            print(X_d)
-
-        X_err = mr.se3ToVec(mr.MatrixLog6(mr.TransInv(X) @ X_d))
-        err_hist.append(X_err)
-
-        V, integral_error   = FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step, integral_error)
-
-        v_dot               = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed, np.array([1.0, 1.0, 0.2, 1.0, 1.0]), time_step=0.01, l=l, r=r, w=w)
+        # Actual control command to wheels and joints
+        v_dot               = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, max_speed, np.array([1.6, 1.6, 0.2, 1.6, 1.6]), time_step=0.01, l=l, r=r, w=w)
         print("Control commands:", v_dot)
         control_input       = v_dot.tolist()
         current_cfg         = NextState(current_cfg, control_input, time_step, max_speed, l, r, w)
-        
-        X                   = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
-        
+        current_cfg[3:8]   = JointLimitTest(current_cfg[3:8], np.array([2*np.pi, 2*np.pi, 2*np.pi, 2*np.pi, 2*np.pi]))
+
+        # Log the configuration and tracking error for analysis and visualization
         current_cfg_save    = copy.deepcopy(current_cfg)
         current_cfg_save.append(traj[i][-1])
         cfg_hist.append(current_cfg_save)
+        err_hist.append(X_err)
     
     # plot tracking error
     plt.figure()
@@ -341,7 +509,7 @@ def test():
                     [-0.985, 0.0, 0.170, 0.570],
                     [0.0 ,0.0, 0.0, 1.0]])
     
-    V, _ = FeedforwardControl(X, X_d, X_dnext, np.eye(6), np.zeros((6,6)))
+    V, _, _ = FeedforwardControl(X, X_d, X_dnext, np.eye(6), np.zeros((6,6)))
     control_cmd = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist)
     print("Control twist: ", V)
     print("Control command: ", control_cmd)
@@ -356,6 +524,43 @@ def test():
     print("End-effector initial configuration")
     print(T_se)
 
+    # Test trajectory generation
+    # Trajectory generation
+    T_sc_initial    = np.array([[1.0, 0.0, 0.0, 1.0  ], 
+                                [0.0, 1.0, 0.0, 0.0  ], 
+                                [0.0, 0.0, 1.0, 0.025], 
+                                [0.0, 0.0, 0.0, 1.0  ]])
+    
+    T_sc_final      = np.array([[ 0.0, 1.0, 0.0,  0.0  ], 
+                                [-1.0, 0.0, 0.0, -1.0  ], 
+                                [ 0.0, 0.0, 1.0,  0.025], 
+                                [ 0.0, 0.0, 0.0,  1.0  ]])
+    
+    T_se_initial    = np.array([[0.0, 0.0, 1.0, 0.0  ], 
+                                [0.0, 1.0, 0.0, 0.0  ], 
+                                [-1.0, 0.0, 0.0, 0.5 ], 
+                                [0.0, 0.0, 0.0, 1.0  ]])
+    
+    T_ce_standoff   = np.array([[ 0.0, 0.0, 1.0, 0.0 ], 
+                                [ 0.0, 1.0, 0.0, 0.0 ], 
+                                [-1.0, 0.0, 0.0, 0.1 ], 
+                                [ 0.0, 0.0, 0.0, 1.0 ]])
+    
+    T_ce_grasp      = np.array([[ 0.0, 0.0, 1.0, 0.0   ], 
+                                [ 0.0, 1.0, 0.0, 0.0   ], 
+                                [-1.0, 0.0, 0.0, 0.025 ], 
+                                [ 0.0, 0.0, 0.0, 1.0   ]])
+    k = 1
+
+    traj = TrajectoryGenerator(T_se_initial, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_standoff, k=1, trajectory_opt="cartesian")
+    initial_cfg = traj[0]
+    print("Initial configuration of the trajectory: ", initial_cfg)
+    R_d = np.reshape(np.array(initial_cfg[0:9]), (3, 3))
+    p_d = np.reshape(np.array(initial_cfg[9:12]), (3, 1))
+    X_d = np.vstack((np.hstack((R_d, p_d)), np.array([0.0, 0.0, 0.0, 1.0])))
+    print("Initial configuration of the trajectory in SE(3): ")
+    print(X_d)
+
 if __name__ == "__main__":
-    # main()
     main()
+    # test()
