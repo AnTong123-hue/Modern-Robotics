@@ -2,12 +2,6 @@ import modern_robotics as mr
 import numpy as np
 import csv
 import copy
-import matplotlib.pyplot as plt
-import argparse
-import os
-
-# Set precision to 3 decimal places
-np.set_printoptions(precision=3)
 
 def save_result(csvdata, filename, opt=1):
     with open(f"results/{filename}.csv", 'w', newline='') as save_file:
@@ -212,7 +206,7 @@ def TrajectoryGenerator(T_se_inital, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_
     
     return traj
 
-def MMForwardKinematics(current_cfg, T_b0, M_0e, Blist):
+def ForwardKinematics(current_cfg, T_b0, M_0e, Blist):
     phi, x, y = current_cfg[0:3]
     thetalist = current_cfg[3:8]
     wheel_cfg = current_cfg[8:]
@@ -299,17 +293,6 @@ def TestJointLimit(current_joint, joint_speed, joint_max_speed, joint_limit, tim
 
     return joint_violates
 
-def JointLimitTest(current_joint, joint_limit):
-    next_joint = copy.deepcopy(current_joint)
-    for i in range(len(current_joint)):
-        if current_joint[i] > joint_limit[i][0]:
-            next_joint[i] = joint_limit[i][0]
-        elif current_joint[i] < -joint_limit[i][1]:
-            next_joint[i] = -joint_limit[i][1]
-        else:
-            next_joint[i] = current_joint[i]
-    return next_joint
-
 def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, joint_max_speed=10, joint_limit=np.zeros(5), time_step = 0.01, l=0.235, r=0.0475, w=0.15):
     """
     Calculate wheel speed and joint speed from control twist 
@@ -338,7 +321,7 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, joint_max_speed=10, joint
     v_dot = np.linalg.pinv(J_total, rtol=0.0001) @ V
     joint_speed = v_dot[4:]
     joint_violates = TestJointLimit(thetalist, joint_speed, joint_max_speed, joint_limit, time_step)
-    # print("Joint violates: ", joint_violates)
+    print("Joint violates: ", joint_violates)
     while (np.sum(joint_violates) != 0):
 
         # Zero Jacobian of joint violating joint limit
@@ -357,213 +340,6 @@ def TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, joint_max_speed=10, joint
         # print("Joint lower limit: ", joint_limit[:, 0])
         # print("Joint violates: ", joint_violates)
     return v_dot
-
-def main(data='original', controller='FPI'):
-    # Create error log file
-    error_log_dir = "./error log"
-    log_file = f"{data}_cfg_{controller}_control.log"
-    log_fig  = f"{data}_cfg_{controller}_control.png"
-    
-    if not os.path.exists(error_log_dir):
-        os.makedirs(error_log_dir)
-
-
-    # Trajectory generation
-    T_sc_initial    = np.array([[1.0, 0.0, 0.0, 1.0  ], 
-                                [0.0, 1.0, 0.0, 0.0  ], 
-                                [0.0, 0.0, 1.0, 0.025], 
-                                [0.0, 0.0, 0.0, 1.0  ]])
-    
-    T_sc_final      = np.array([[ 0.0, 1.0, 0.0,  0.0  ], 
-                                [-1.0, 0.0, 0.0, -1.0  ], 
-                                [ 0.0, 0.0, 1.0,  0.025], 
-                                [ 0.0, 0.0, 0.0,  1.0  ]])
-    
-    T_se_initial    = np.array([[1.0, 0.0, 0.0, 0.0  ], 
-                                [0.0, 1.0, 0.0, 0.0  ], 
-                                [0.0, 0.0, 1.0, 0.5 ], 
-                                [0.0, 0.0, 0.0, 1.0  ]])
-    
-    T_ce_standoff   = np.array([[ 0.0, 0.0, 1.0, 0.0 ], 
-                                [ 0.0, 1.0, 0.0, 0.0 ], 
-                                [-1.0, 0.0, 0.0, 0.1 ], 
-                                [ 0.0, 0.0, 0.0, 1.0 ]])
-    
-    T_ce_grasp      = np.array([[ 0.0, 0.0, 1.0, 0.01 ], 
-                                [ 0.0, 1.0, 0.0, 0.0   ], 
-                                [-1.0, 0.0, 0.0, 0.01 ], 
-                                [ 0.0, 0.0, 0.0, 1.0   ]])
-    k = 1
-    # Calculate the reference trajectory for the end-effector to follow
-    traj = TrajectoryGenerator(T_se_initial, T_sc_initial, T_sc_final, T_ce_grasp, T_ce_standoff, k=k, trajectory_opt="twist", time_scale_method="quintic")
-
-    # ============================== The system's parameters and initial configuration ==============================
-    # PID control gain
-    Kp = np.zeros((6,6))
-    Ki = np.zeros((6,6))
-
-    Kp = np.array([[1.5, 0, 0, 0, 0, 0],
-                   [0, 1.5, 0, 0, 0, 0],
-                   [0, 0, 1.5, 0, 0, 0],
-                   [0, 0, 0, 1.5, 0, 0],
-                   [0, 0, 0, 0, 1.5, 0],
-                   [0, 0, 0, 0, 0, 1.5]])
-    
-    Ki = np.array([[0.15, 0, 0, 0, 0, 0],
-                   [0, 0.15, 0, 0, 0, 0],
-                   [0, 0, 0.15, 0, 0, 0],
-                   [0, 0, 0, 0.15, 0, 0],
-                   [0, 0, 0, 0, 0.15, 0],
-                   [0, 0, 0, 0, 0, 0.15]])  
-    
-    joint_max_speed = 5
-    wheel_max_speed = 3
-    
-    # Mobile robot parameters
-    l=0.235
-    r=0.0475
-    w=0.15
-    
-    # Choose initial configuration of mobile manipulator
-    match data:
-        case "original":
-            q = np.array([0.0, 0.0, 0.0])
-            u = np.array([0.0, 0.0, 0.0, 0.0])
-            thetalist = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-            current_cfg = np.concatenate((q, thetalist, u))
-        case "modified":
-            q = np.array([0.1, -0.25, 0.25])
-            u = np.array([0.0, 0.0, 0.0, 0.0])
-            thetalist = np.array([0.5, 0.2, -0.3, 0.0, 0.1])
-            current_cfg = np.concatenate((q, thetalist, u)) 
-        case _:
-            q = np.array([0.0, 0.0, 0.0])
-            u = np.array([0.0, 0.0, 0.0, 0.0])
-            thetalist = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-            current_cfg = np.concatenate((q, thetalist, u))
-    
-    # Robotic arm parameters
-    Blist = np.array([[0.0,  0.0, 1.0,  0.0     , 0.033 , 0.0],
-                      [0.0, -1.0, 0.0, -0.5076  , 0.0   , 0.0],
-                      [0.0, -1.0, 0.0, -0.3526  , 0.0   , 0.0],
-                      [0.0, -1.0, 0.0, -0.2176  , 0.0   , 0.0],
-                      [0.0,  0.0, 1.0,  0.0     , 0.0   , 0.0]]).T
-
-    T_b0 = np.array([[1.0, 0.0, 0.0, 0.1662 ],
-                     [0.0, 1.0, 0.0, 0.0    ],
-                     [0.0, 0.0, 1.0, 0.0026 ],
-                     [0.0, 0.0, 0.0, 1.0    ]])
-    
-    M_0e = np.array([[1.0, 0.0, 0.0, 0.033  ],
-                     [0.0, 1.0, 0.0, 0.0    ],
-                     [0.0, 0.0, 1.0, 0.6546 ],
-                     [0.0, 0.0, 0.0, 1.0    ]])
-    
-    joint_limit = np.array([ [-np.pi    , np.pi     ],
-                             [-np.pi    , np.pi     ],
-                             [-np.pi    , 0.2       ],
-                             [-np.pi/2  , np.pi     ],
-                             [-np.pi    , np.pi     ]])
-    
-    # Initial configuration of end-effector
-    X                   = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
-    time_step           = 0.01
-    integral_error      = 0
-    cfg_hist            = []
-    current_cfg_save    = copy.deepcopy(current_cfg.tolist())
-    current_cfg_save.append(0)
-    cfg_hist.append(current_cfg_save)
-    err_hist            = []
-    v_dot_hist          = []
-
-    with open(f"./{error_log_dir}/{log_file}", "w", encoding="utf-8") as f:
-        f.write("================================= Initial parameter =================================\n")
-        f.write(f"- Initial configuration: {current_cfg}\n")
-        f.write(f"- Controller: {controller}\n")
-        f.write(f"- Proportional gains: \n")
-        for i in range(Kp.shape[0]):
-            f.write(f"{Kp[i]}\n")
-        f.write(f"- Integral gain: \n")
-        for i in range(Ki.shape[0]):
-            f.write(f"{Ki[i]}\n")
-        f.write("================================= Error tracking during manipulation =================================\n")
-    
-    # ============================== Feedforward Control Loop ==============================
-
-    for i in range(len(traj) - 1):
-        # Current end-effector configuration
-        thetalist                   = np.array(current_cfg[3:8])
-        X                           = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
-        # Desired end-effector configuration
-        R_d                         = np.reshape(np.array(traj[i][0:9]), (3, 3))
-        p_d                         = np.reshape(np.array(traj[i][9:12]), (3, 1))
-        X_d                         = np.vstack((np.hstack((R_d, p_d)), np.array([0.0, 0.0, 0.0, 1.0])))
-        # Next desired end-effector configuration
-        R_dnext                     = np.reshape(np.array(traj[i+1][0:9]), (3, 3))
-        p_dnext                     = np.reshape(np.array(traj[i+1][9:12]), (3, 1))
-        X_dnext                     = np.vstack((np.hstack((R_dnext, p_dnext)), np.array([0.0, 0.0, 0.0, 1.0])))
-
-        # Twist feedforward control law to calculate the control command
-        V, X_err, integral_error    = FeedforwardControl(X, X_d, X_dnext, Kp, Ki, time_step, integral_error, controller)
-        
-        # Actual control command to wheels and joints
-        v_dot                       = TwistToJointSpeed(V, M_0e, T_b0, Blist, thetalist, joint_max_speed, joint_limit, time_step=0.01, l=l, r=r, w=w)
-        control_input               = v_dot.tolist()
-        current_cfg                 = NextState(current_cfg, control_input, time_step, [wheel_max_speed, joint_max_speed], l, r, w)
-        # current_cfg[3:8]    = JointLimitTest(current_cfg[3:8], joint_limit)
-
-        # Log the configuration and tracking error for analysis and visualization
-        current_cfg_save            = copy.deepcopy(current_cfg)
-        current_cfg_save.append(traj[i][-1])
-        cfg_hist.append(current_cfg_save)
-        err_hist.append(X_err)
-        v_dot_hist.append(V)
-
-        with open(f"./{error_log_dir}/{log_file}", "a", encoding="utf-8") as f:
-            f.write(f"Tracking error X_err: {X_err}\n")
-            f.write(f"Control commands: {v_dot}\n")
-
-        # Display log
-        print("Tracking error X_err:", X_err)       
-        print("Control commands:", v_dot)
-
-    err_hist = np.array(err_hist)
-    # Save to CSV file
-    save_result(cfg_hist, f"{data}_cfg_{controller}_control")
-    save_result(err_hist, "Tracking_error")
-    save_result(v_dot_hist, "Control command")
-    
-    # plot tracking error
-    plt.figure(1)
-    plt.subplot(2, 1, 1)
-    plt.plot(err_hist[:, 0], label='omega_x_err')
-    plt.plot(err_hist[:, 1], label='omega_y_err')
-    plt.plot(err_hist[:, 2], label='omega_z_err')
-    plt.plot(err_hist[:, 3], label='v_x_err')
-    plt.plot(err_hist[:, 4], label='v_y_err')
-    plt.plot(err_hist[:, 5], label='v_z_err')
-    plt.xlabel('Time step')
-    plt.ylabel('Tracking Error')
-    plt.title('Tracking Error over Time')
-    plt.legend()
-
-
-    # plot theta list to check joint limit and collision
-    cfg_hist = np.array(cfg_hist)
-    plt.subplot(2, 1, 2)
-    plt.plot(cfg_hist[:, 3], label='theta_1')
-    plt.plot(cfg_hist[:, 4], label='theta_2')
-    plt.plot(cfg_hist[:, 5], label='theta_3')
-    plt.plot(cfg_hist[:, 6], label='theta_4')
-    plt.plot(cfg_hist[:, 7], label='theta_5')
-    plt.xlabel('Time step')
-    plt.ylabel('Joint angle')
-    plt.title('Joint angle over Time')
-    plt.legend()
-    plt.savefig(f"./{error_log_dir}/{log_fig}", dpi=300, bbox_inches='tight', transparent=False)
-    plt.show()
-
-
 
 def test():
 
@@ -612,7 +388,7 @@ def test():
     thetalist = np.array([0.0, 0.0, 0.0, -np.pi/2, 0.0])
     
     current_cfg = [0, 0, 0, 0, 0, 0.2,-1.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    T_se = MMForwardKinematics(current_cfg, T_b0, M_0e, Blist)
+    T_se = ForwardKinematics(current_cfg, T_b0, M_0e, Blist)
     print("End-effector initial configuration")
     print(T_se)
 
@@ -652,16 +428,3 @@ def test():
     X_d = np.vstack((np.hstack((R_d, p_d)), np.array([0.0, 0.0, 0.0, 1.0])))
     print("Initial configuration of the trajectory in SE(3): ")
     print(X_d)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--controller", help="Controller type: FPI, PI, F, P")
-    parser.add_argument("-d", "--data", help="Choose initial configuration of mobile manipulator")
-    args = parser.parse_args()
-
-    if args.data and args.controller:   
-        main(args.data, args.controller)
-    else:
-        print("Not enough input argument !!!")
-
-    # test()
