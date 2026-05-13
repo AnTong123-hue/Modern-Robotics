@@ -1,0 +1,15 @@
+function [success] = trajectory_plot(tr_info,fig)
+%TRAJECTORY_PLOT Summary of this function goes here
+%   Detailed explanation goes here
+figure(fig);
+hold on;
+if (tr_info(1) == 0) 
+    % Plot a line with two points' position
+    
+else
+
+end
+success = 1;
+
+end
+
