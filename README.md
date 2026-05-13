@@ -14,3 +14,6 @@ This repo is used to log my completed projects and assignments which are related
 - Robot dynamic project: Simulate behavior of robot based on its dynamics
 - Capstone project: A mobile manipulator doing pick-and-place task
 
+# Prequisites
+Please follow this [repo](https://github.com/NxRLab/ModernRobotics) to install the `modern_robotics` python package
+
