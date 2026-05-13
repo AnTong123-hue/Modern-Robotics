@@ -230,10 +230,6 @@ def main(data='best', controller='FPI'):
     plt.savefig(f"./{sub_dir}/{log_fig}", dpi=300, bbox_inches='tight', transparent=False)
     plt.show()
 
-
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--controller", help="Controller type: FPI, PI, F, P")
